@@ -1,0 +1,36 @@
+name: Security Audit & Testing
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy, rustfmt
+    
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+
+    - name: Format Check
+      run: cargo fmt -- --check
+
+    - name: Clippy Lints
+      run: cargo clippy -- -D warnings
+
+    - name: Unit & Integration Tests
+      run: cargo test
+
+    - name: Install cargo-audit
+      run: cargo install cargo-audit
+
+    - name: Dependency Security Audit
+      run: cargo audit
