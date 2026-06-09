@@ -60,10 +60,12 @@ Deleting developer dependencies is inherently dangerous. Dehydrate implements a 
 1. **RCE Prevention (Zero Trust):** The `.dehydrate.json` snapshot file does *not* execute arbitrary commands upon rehydration. It strictly enforces an internal package manager whitelist (e.g., `npm`, `cargo`) to prevent Remote Code Execution (RCE).
 2. **Native OS Execution:** Dehydrate bypasses shell wrappers completely (e.g., bypassing `cmd.exe` on Windows and invoking `.cmd` scripts natively) to ensure shell metacharacter injection is mathematically impossible.
 3. **The Awake Trust Prompt:** Before running any automated reinstall commands during `dehydrate awake`, the CLI explicitly prints what it's about to do and mandates a `(Y/n)` human-in-the-loop interactive confirmation. It automatically aborts if piped from a malicious non-interactive background script.
-2. **Path Traversal Protection:** Before attempting to delete any heavy folder, Dehydrate explicitly checks if it is a symlink. This prevents a malicious repository from disguising a system folder (e.g., `C:\Windows`) as `node_modules` to trigger arbitrary file destruction.
-3. **Resource Exhaustion (DoS) Limits:** All filesystem traversal algorithms implement a hard `--max-depth` boundary (default: 100) to prevent infinite loops from recursive symlinks.
-4. **Memory Exhaustion Prevention:** The `awake` parser will instantly reject any `.dehydrate.json` payload larger than 1MB to prevent Out-Of-Memory (OOM) attacks.
-5. **The Lockfile Golden Rule:** Hibernation is strictly gated behind the presence of lockfiles to guarantee deterministic re-builds.
+4. **Path Traversal Protection:** Before attempting to delete any heavy folder, Dehydrate explicitly checks if it is a symlink. This prevents a malicious repository from disguising a system folder (e.g., `C:\Windows`) as `node_modules` to trigger arbitrary file destruction.
+5. **Double-Hibernation Data-Loss Prevention:** Dehydrate mathematically ignores any project that already contains a `.dehydrate.json` snapshot. This guarantees your original hibernation timestamp and megabytes-saved metrics can never be overwritten by overzealous scanning.
+6. **Local Python Sandbox Isolation:** When waking up raw `pip` projects, Dehydrate explicitly intercepts the execution to natively rebuild your Python `venv` from scratch. It then resolves the OS-specific path to the newly sandboxed `pip` binary to ensure your global system environment is never accidentally polluted.
+7. **Resource Exhaustion (DoS) Limits:** All filesystem traversal algorithms implement a hard `--max-depth` boundary (default: 100) to prevent infinite loops from recursive symlinks.
+8. **Memory Exhaustion Prevention:** The `awake` parser will instantly reject any `.dehydrate.json` payload larger than 1MB to prevent Out-Of-Memory (OOM) attacks.
+9. **The Lockfile Golden Rule:** Hibernation is strictly gated behind the presence of lockfiles to guarantee deterministic re-builds.
 
 ---
 *Built to save your SSD.*
