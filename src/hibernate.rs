@@ -64,11 +64,26 @@ pub fn execute_hibernation(project_dir: &Path, metadata: PolyglotMetadata, dry_r
     for target in &metadata.targets_to_delete {
         if target.exists() {
             // SECURITY: Explicitly check for symlinks to prevent path traversal / arbitrary deletion attacks
-            if let Ok(metadata) = fs::symlink_metadata(target) {
-                if metadata.file_type().is_symlink() {
-                    eprintln!("  Security Alert: {} is a symlink. Skipping deletion to prevent arbitrary file destruction.", target.display());
-                    continue;
+            // We must check if the target or any of its ancestors are symlinks to prevent component symlink traversal
+            let mut is_symlink_path = false;
+            for ancestor in target.ancestors() {
+                // Only check ancestors up to the project_dir (inclusive),
+                // so we don't flag benign symlinks like `/tmp` or `/var/www`
+                if let Ok(metadata) = fs::symlink_metadata(ancestor) {
+                    if metadata.file_type().is_symlink() {
+                        is_symlink_path = true;
+                        break;
+                    }
                 }
+
+                if ancestor == project_dir {
+                    break;
+                }
+            }
+
+            if is_symlink_path {
+                eprintln!("  Security Alert: {} (or one of its ancestors within the project) is a symlink. Skipping deletion to prevent arbitrary file destruction.", target.display());
+                continue;
             }
 
             if let Err(e) = remove_dir_all_force(target) {
@@ -121,7 +136,7 @@ fn remove_dir_all_force(path: &Path) -> Result<()> {
         }
         #[cfg(not(target_os = "windows"))]
         {
-            anyhow::bail!("Failed to delete {}: {}", path.display(), e);
+            anyhow::bail!("Failed to delete {}: {}", path.display(), _e);
         }
     }
     Ok(())

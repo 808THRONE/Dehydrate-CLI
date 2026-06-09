@@ -111,7 +111,7 @@ fn test_malicious_awake_rejection() {
         .expect("Failed to execute dehydrate");
 
     if let Some(mut stdin) = child.stdin.take() {
-        stdin.write_all(b"N\n").unwrap();
+        let _ = stdin.write_all(b"N\n");
     }
 
     let output = child.wait_with_output().unwrap();
