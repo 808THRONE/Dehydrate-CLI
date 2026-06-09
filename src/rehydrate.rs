@@ -26,6 +26,17 @@ pub fn rehydrate_project(project_dir: &Path) -> Result<()> {
     // 2. Interactive Trust Prompt
     println!("\nThis project requests to run the following rehydration commands:");
     for pm in &snapshot.package_managers {
+        if pm.as_str() == "pip" {
+            let venv_name = snapshot.deleted_paths.iter()
+                .find(|p| *p == "venv" || *p == ".venv")
+                .map(|s| s.as_str())
+                .unwrap_or("venv");
+            println!("  - python -m venv {}", venv_name);
+            let local_pip = if cfg!(target_os = "windows") { format!("{}\\Scripts\\pip", venv_name) } else { format!("{}/bin/pip", venv_name) };
+            println!("  - {} install -r requirements.txt", local_pip);
+            continue;
+        }
+
         let (bin, args): (&str, &[&str]) = match pm.as_str() {
             "npm" => ("npm", &["ci"]),
             "yarn" => ("yarn", &["install"]),
@@ -34,7 +45,6 @@ pub fn rehydrate_project(project_dir: &Path) -> Result<()> {
             "cargo" => ("cargo", &["fetch"]),
             "poetry" => ("poetry", &["install"]),
             "pipenv" => ("pipenv", &["install"]),
-            "pip" => ("pip", &["install", "-r", "requirements.txt"]),
             _ => bail!("Security Error: Unrecognized or malicious package manager '{}'", pm),
         };
         let mut full_cmd = vec![bin];
@@ -58,15 +68,43 @@ pub fn rehydrate_project(project_dir: &Path) -> Result<()> {
 
     for pm in &snapshot.package_managers {
         // 3. Strict Whitelist & Command Reconstruction
-        let (bin, args): (&str, &[&str]) = match pm.as_str() {
-            "npm" => ("npm", &["ci"]),
-            "yarn" => ("yarn", &["install"]),
-            "pnpm" => ("pnpm", &["install"]),
-            "bun" => ("bun", &["install"]),
-            "cargo" => ("cargo", &["fetch"]),
-            "poetry" => ("poetry", &["install"]),
-            "pipenv" => ("pipenv", &["install"]),
-            "pip" => ("pip", &["install", "-r", "requirements.txt"]),
+        let mut local_pip_path = String::new();
+        let (bin, args): (&str, Vec<&str>) = match pm.as_str() {
+            "npm" => ("npm", vec!["ci"]),
+            "yarn" => ("yarn", vec!["install"]),
+            "pnpm" => ("pnpm", vec!["install"]),
+            "bun" => ("bun", vec!["install"]),
+            "cargo" => ("cargo", vec!["fetch"]),
+            "poetry" => ("poetry", vec!["install"]),
+            "pipenv" => ("pipenv", vec!["install"]),
+            "pip" => {
+                let venv_name = snapshot.deleted_paths.iter()
+                    .find(|p| *p == "venv" || *p == ".venv")
+                    .map(|s| s.as_str())
+                    .unwrap_or("venv");
+
+                println!("Rebuilding Python virtual environment: {}...", venv_name);
+                let venv_status = Command::new("python")
+                    .arg("-m")
+                    .arg("venv")
+                    .arg(venv_name)
+                    .current_dir(project_dir)
+                    .status()
+                    .with_context(|| "Failed to execute 'python -m venv'")?;
+                
+                if !venv_status.success() {
+                    bail!("Failed to recreate Python virtual environment.");
+                }
+
+                if cfg!(target_os = "windows") {
+                    local_pip_path = project_dir.join(venv_name).join("Scripts").join("pip").to_string_lossy().to_string();
+                } else {
+                    local_pip_path = project_dir.join(venv_name).join("bin").join("pip").to_string_lossy().to_string();
+                }
+                
+                // We borrow the string reference here to pass back safely
+                (local_pip_path.as_str(), vec!["install", "-r", "requirements.txt"])
+            },
             _ => bail!("Security Error: Unrecognized package manager '{}'", pm),
         };
 
