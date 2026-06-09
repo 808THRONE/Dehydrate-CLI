@@ -162,7 +162,7 @@ pub fn rehydrate_project(project_dir: &Path) -> Result<()> {
 }
 
 fn get_safe_bin(bin: &str) -> String {
-    if cfg!(target_os = "windows") && ["npm", "yarn", "pnpm", "npx", "bun"].contains(&bin) {
+    if cfg!(target_os = "windows") && ["npm", "yarn", "pnpm", "npx"].contains(&bin) {
         format!("{}.cmd", bin)
     } else {
         bin.to_string()
