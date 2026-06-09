@@ -67,17 +67,17 @@ pub fn execute_hibernation(project_dir: &Path, metadata: PolyglotMetadata, dry_r
             // We must check if the target or any of its ancestors are symlinks to prevent component symlink traversal
             let mut is_symlink_path = false;
             for ancestor in target.ancestors() {
-                // Only check ancestors up to the project_dir (inclusive),
-                // so we don't flag benign symlinks like `/tmp` or `/var/www`
+                // Do not check if the project_dir itself (or above) is a symlink.
+                // It is safe for the project root to be a symlink or reside inside one.
+                if ancestor == project_dir {
+                    break;
+                }
+
                 if let Ok(metadata) = fs::symlink_metadata(ancestor) {
                     if metadata.file_type().is_symlink() {
                         is_symlink_path = true;
                         break;
                     }
-                }
-
-                if ancestor == project_dir {
-                    break;
                 }
             }
 
