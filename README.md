@@ -9,7 +9,7 @@ If you have dozens of old projects sitting around, you know how quickly `node_mo
 - **Blazing Fast Scanning:** Uses highly optimized, multi-threaded traversal (via the `ignore` crate) to find stale projects while skipping over junk folders instantly.
 - **Polyglot Support:** Got a project with a Rust backend and a React frontend in the same folder? Dehydrate automatically detects both, deletes both `target` and `node_modules`, and rehydrates both in sequence.
 - **Zero-Trust Security:** Absolutely refuses to execute arbitrary strings. Rehydration commands are safely reconstructed internally using a strict package manager whitelist to prevent Remote Code Execution (RCE) vulnerabilities.
-- **Interactive Auto-Lockfiles:** Dehydrate strictly requires lockfiles to ensure 100% deterministic re-builds. If it finds an old project missing a lockfile, it doesn't just crash—it interactively prompts you and offers to generate it on the spot (e.g., `npm install --package-lock-only`)!
+- **Advanced Bulk UX & Auto-Lockfiles:** Dehydrate strictly requires lockfiles to ensure 100% deterministic re-builds. If you scan 50 projects and 10 are missing lockfiles, Dehydrate won't annoy you with 10 sequential prompts. Instead, it presents a single, unified interactive bulk menu allowing you to instantly auto-generate the 10 lockfiles and seamlessly hibernate all 50 projects in one continuous sweep!
 - **Path Traversal Protection:** Explicitly checks for malicious symlinks trying to disguise system folders as dependency caches.
 
 ## Installation

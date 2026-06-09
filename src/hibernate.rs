@@ -1,4 +1,4 @@
-use crate::ecosystem::{analyze_project, MissingLockfileError};
+use crate::ecosystem::{analyze_project, PolyglotMetadata};
 use anyhow::{Context, Result};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -16,61 +16,7 @@ pub struct DehydrateSnapshot {
     pub space_saved_bytes: u64,
 }
 
-/// Executes the hibernation process for a single project directory.
-pub fn hibernate_project(project_dir: &Path, dry_run: bool, max_depth: usize) -> Result<()> {
-    // 1. Analyze the project (this automatically enforces the lockfile safety rule)
-    let metadata = match analyze_project(project_dir) {
-        Ok(m) => m,
-        Err(e) => {
-            if let Some(missing_lock) = e.downcast_ref::<MissingLockfileError>() {
-                if dry_run {
-                    println!("  [DRY RUN] Would prompt to auto-generate lockfile using: `{}`", missing_lock.generation_command);
-                    return Ok(());
-                }
-                
-                use std::io::IsTerminal;
-                if !std::io::stdin().is_terminal() {
-                    return Err(e).context(format!("Missing lockfile at {}, and cannot auto-generate in non-interactive mode.", project_dir.display()));
-                }
-                
-                println!("  [!] Warning: {} is missing a lockfile.", project_dir.display());
-                println!("      Safe rehydration cannot be guaranteed without one.");
-                println!("      Would you like Dehydrate to auto-generate it now using `{}`? (Y/n)", missing_lock.generation_command);
-                
-                let mut input = String::new();
-                std::io::stdin().read_line(&mut input)?;
-                
-                if input.trim().to_lowercase() == "y" || input.trim() == "" {
-                    println!("  Generating lockfile...");
-                    let parts: Vec<&str> = missing_lock.generation_command.split_whitespace().collect();
-                    
-                    let mut cmd = if cfg!(target_os = "windows") {
-                        let mut c = std::process::Command::new("cmd");
-                        c.arg("/C").arg(parts[0]);
-                        for arg in &parts[1..] { c.arg(arg); }
-                        c
-                    } else {
-                        let mut c = std::process::Command::new(parts[0]);
-                        for arg in &parts[1..] { c.arg(arg); }
-                        c
-                    };
-                    
-                    let status = cmd.current_dir(project_dir).status()?;
-                    if status.success() {
-                        println!("  Lockfile generated successfully! Retrying hibernation...");
-                        return hibernate_project(project_dir, dry_run, max_depth);
-                    } else {
-                        anyhow::bail!("Failed to generate lockfile.");
-                    }
-                } else {
-                    println!("  Skipping project.");
-                    return Ok(());
-                }
-            } else {
-                return Err(e).context(format!("Failed to analyze project at {}", project_dir.display()));
-            }
-        }
-    };
+pub fn execute_hibernation(project_dir: &Path, metadata: PolyglotMetadata, dry_run: bool, max_depth: usize) -> Result<()> {
 
     // 2. Identify heavy folders to delete and calculate their size
     let mut deleted_paths = Vec::new();
@@ -150,7 +96,7 @@ fn get_dir_size(path: &Path, max_depth: usize) -> u64 {
 
 /// Fallback mechanism for Windows read-only file deletion failures
 fn remove_dir_all_force(path: &Path) -> Result<()> {
-    if let Err(e) = fs::remove_dir_all(path) {
+    if let Err(_e) = fs::remove_dir_all(path) {
         #[cfg(target_os = "windows")]
         {
             // Try to forcefully remove read-only flags
@@ -196,7 +142,8 @@ mod tests {
         }
 
         // 2. Action
-        hibernate_project(project_dir, false, 100)?;
+        let metadata = analyze_project(project_dir)?;
+        execute_hibernation(project_dir, metadata, false, 100)?;
 
         // 3. Assertions
         assert!(!nm.exists(), "node_modules should be deleted");
@@ -227,8 +174,8 @@ mod tests {
         fake_file.write_all(b"fake data")?;
 
         // Action: Should error
-        let result = hibernate_project(project_dir, false, 100);
-        assert!(result.is_err(), "Hibernation should fail without a lockfile");
+        let result = analyze_project(project_dir);
+        assert!(result.is_err(), "Analysis should fail without a lockfile");
 
         // Assertion: Heavy folder MUST still exist
         assert!(nm.exists(), "node_modules must NOT be deleted if lockfile is missing");
