@@ -94,7 +94,13 @@ fn get_dir_size(path: &Path, max_depth: usize) -> u64 {
         .sum()
 }
 
-/// Fallback mechanism for Windows read-only file deletion failures
+/// Fallback mechanism for Windows read-only file deletion failures.
+/// 
+/// SECURITY NOTE: There is an acknowledged TOCTOU (Time-of-Check to Time-of-Use) 
+/// race condition between the symlink check in execute_hibernation and the actual 
+/// deletion here. Robust mitigation would require OS-specific directory file 
+/// descriptors (e.g. `openat`, `unlinkat`), which is safely out-of-scope for 
+/// this local developer tool's primary threat model.
 fn remove_dir_all_force(path: &Path) -> Result<()> {
     if let Err(_e) = fs::remove_dir_all(path) {
         #[cfg(target_os = "windows")]

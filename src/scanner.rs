@@ -23,7 +23,8 @@ impl Scanner {
         let mut builder = WalkBuilder::new(root);
         builder.max_depth(Some(self.max_depth)).hidden(true).git_ignore(true).filter_entry(|e| {
             let name = e.file_name().to_string_lossy();
-            name != "node_modules" && name != "target" && name != "venv" && name != ".venv" && name != ".git"
+            name != "node_modules" && name != "target" && name != "venv" && name != ".venv" 
+            && name != ".git" && name != ".idea" && name != ".vscode" && name != ".DS_Store"
         });
 
         let walker = builder.build();
@@ -62,7 +63,8 @@ impl Scanner {
         // an `npm install` doesn't make a project look "recently active" if no code was changed.
         builder.max_depth(Some(self.max_depth)).hidden(true).git_ignore(true).filter_entry(|e| {
             let name = e.file_name().to_string_lossy();
-            name != "node_modules" && name != "target" && name != "venv" && name != ".venv" && name != ".git"
+            name != "node_modules" && name != "target" && name != "venv" && name != ".venv" 
+            && name != ".git" && name != ".idea" && name != ".vscode" && name != ".DS_Store"
         });
 
         let walker = builder.build();

@@ -23,11 +23,9 @@ pub fn rehydrate_project(project_dir: &Path) -> Result<()> {
     let snapshot: DehydrateSnapshot = serde_json::from_str(&json)
         .with_context(|| "Failed to parse .dehydrate.json")?;
 
-    println!("Rehydrating {:?} project...", snapshot.ecosystems);
-
+    // 2. Interactive Trust Prompt
+    println!("\nThis project requests to run the following rehydration commands:");
     for pm in &snapshot.package_managers {
-        // 2. Strict Whitelist & Command Reconstruction (Security Fix)
-        // We DO NOT trust the install_command from the JSON file to prevent Remote Code Execution (RCE).
         let (bin, args): (&str, &[&str]) = match pm.as_str() {
             "npm" => ("npm", &["ci"]),
             "yarn" => ("yarn", &["install"]),
@@ -39,10 +37,41 @@ pub fn rehydrate_project(project_dir: &Path) -> Result<()> {
             "pip" => ("pip", &["install", "-r", "requirements.txt"]),
             _ => bail!("Security Error: Unrecognized or malicious package manager '{}'", pm),
         };
+        let mut full_cmd = vec![bin];
+        full_cmd.extend_from_slice(args);
+        println!("  - {}", full_cmd.join(" "));
+    }
 
-        // 3. Dependency Check
-        let check_cmd = format!("{} --version", bin);
-        let check_output = build_command(&check_cmd).current_dir(project_dir).output();
+    use std::io::IsTerminal;
+    if std::io::stdin().is_terminal() {
+        println!("\nDo you trust this project environment? (Y/n)");
+        let mut input = String::new();
+        std::io::stdin().read_line(&mut input)?;
+        if input.trim().to_lowercase() != "y" && input.trim() != "" {
+            bail!("Rehydration safely aborted by user.");
+        }
+    }
+
+    println!("Rehydrating {:?} project...", snapshot.ecosystems);
+
+    for pm in &snapshot.package_managers {
+        // 3. Strict Whitelist & Command Reconstruction
+        let (bin, args): (&str, &[&str]) = match pm.as_str() {
+            "npm" => ("npm", &["ci"]),
+            "yarn" => ("yarn", &["install"]),
+            "pnpm" => ("pnpm", &["install"]),
+            "bun" => ("bun", &["install"]),
+            "cargo" => ("cargo", &["fetch"]),
+            "poetry" => ("poetry", &["install"]),
+            "pipenv" => ("pipenv", &["install"]),
+            "pip" => ("pip", &["install", "-r", "requirements.txt"]),
+            _ => bail!("Security Error: Unrecognized package manager '{}'", pm),
+        };
+
+        let safe_bin = get_safe_bin(bin);
+
+        // 4. Dependency Check
+        let check_output = Command::new(&safe_bin).arg("--version").current_dir(project_dir).output();
         if check_output.is_err() || !check_output.unwrap().status.success() {
             bail!(
                 "Missing dependency: Please install '{}' to rehydrate this project.",
@@ -50,10 +79,13 @@ pub fn rehydrate_project(project_dir: &Path) -> Result<()> {
             );
         }
 
-        // 4. Execute Install Command
+        // 5. Execute Install Command
         println!("Running: {} {:?}", bin, args);
         
-        let mut cmd = build_safe_command(bin, args);
+        let mut cmd = Command::new(&safe_bin);
+        for arg in args {
+            cmd.arg(arg);
+        }
         cmd.current_dir(project_dir);
         cmd.stdout(Stdio::inherit());
         cmd.stderr(Stdio::inherit());
@@ -73,38 +105,10 @@ pub fn rehydrate_project(project_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Builds a shell command to safely execute package managers cross-platform.
-/// This prevents "NotFound" errors on Windows for commands like "npm" which are actually "npm.cmd"
-#[cfg(target_os = "windows")]
-fn build_command(command_str: &str) -> Command {
-    let mut cmd = Command::new("cmd");
-    cmd.arg("/C").arg(command_str);
-    cmd
-}
-
-#[cfg(target_os = "windows")]
-fn build_safe_command(bin: &str, args: &[&str]) -> Command {
-    let mut cmd = Command::new("cmd");
-    cmd.arg("/C").arg(bin);
-    for arg in args {
-        cmd.arg(arg);
+fn get_safe_bin(bin: &str) -> String {
+    if cfg!(target_os = "windows") && ["npm", "yarn", "pnpm", "npx", "bun"].contains(&bin) {
+        format!("{}.cmd", bin)
+    } else {
+        bin.to_string()
     }
-    cmd
-}
-
-#[cfg(not(target_os = "windows"))]
-fn build_command(command_str: &str) -> Command {
-    let mut cmd = Command::new("sh");
-    cmd.arg("-c").arg(command_str);
-    cmd
-}
-
-#[cfg(not(target_os = "windows"))]
-fn build_safe_command(bin: &str, args: &[&str]) -> Command {
-    // For non-windows, we bypass the shell entirely for the main execution for maximum safety
-    let mut cmd = Command::new(bin);
-    for arg in args {
-        cmd.arg(arg);
-    }
-    cmd
 }

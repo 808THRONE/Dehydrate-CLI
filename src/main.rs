@@ -173,18 +173,20 @@ fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn get_safe_bin(bin: &str) -> String {
+    if cfg!(target_os = "windows") && ["npm", "yarn", "pnpm", "npx", "bun"].contains(&bin) {
+        format!("{}.cmd", bin)
+    } else {
+        bin.to_string()
+    }
+}
+
 fn generate_lockfile(project_dir: &Path, command: &str) -> anyhow::Result<()> {
     let parts: Vec<&str> = command.split_whitespace().collect();
-    let mut cmd = if cfg!(target_os = "windows") {
-        let mut c = std::process::Command::new("cmd");
-        c.arg("/C").arg(parts[0]);
-        for arg in &parts[1..] { c.arg(arg); }
-        c
-    } else {
-        let mut c = std::process::Command::new(parts[0]);
-        for arg in &parts[1..] { c.arg(arg); }
-        c
-    };
+    let safe_bin = get_safe_bin(parts[0]);
+    
+    let mut cmd = std::process::Command::new(safe_bin);
+    for arg in &parts[1..] { cmd.arg(arg); }
     
     let status = cmd.current_dir(project_dir).status()?;
     if status.success() {
