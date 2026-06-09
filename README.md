@@ -37,7 +37,7 @@ dehydrate hibernate --dry-run
 ```
 When you're ready to pull the trigger:
 ```bash
-dehydrate hibernate
+dehydrate hibernate --stale-days 60
 ```
 
 ### 3. Bring it back to life
@@ -57,7 +57,9 @@ Dehydrate will read the `.dehydrate.json` snapshot, verify your system tools, an
 
 Deleting developer dependencies is inherently dangerous. Dehydrate implements a robust zero-trust security model:
 
-1. **RCE Prevention (Zero Trust):** The `.dehydrate.json` snapshot file does *not* execute arbitrary commands upon rehydration. It strictly enforces an internal package manager whitelist (e.g., `npm`, `cargo`) to prevent Remote Code Execution (RCE) via manipulated `install_command` injection.
+1. **RCE Prevention (Zero Trust):** The `.dehydrate.json` snapshot file does *not* execute arbitrary commands upon rehydration. It strictly enforces an internal package manager whitelist (e.g., `npm`, `cargo`) to prevent Remote Code Execution (RCE).
+2. **Native OS Execution:** Dehydrate bypasses shell wrappers completely (e.g., bypassing `cmd.exe` on Windows and invoking `.cmd` scripts natively) to ensure shell metacharacter injection is mathematically impossible.
+3. **The Awake Trust Prompt:** Before running any automated reinstall commands during `dehydrate awake`, the CLI explicitly prints what it's about to do and mandates a `(Y/n)` human-in-the-loop interactive confirmation. It automatically aborts if piped from a malicious non-interactive background script.
 2. **Path Traversal Protection:** Before attempting to delete any heavy folder, Dehydrate explicitly checks if it is a symlink. This prevents a malicious repository from disguising a system folder (e.g., `C:\Windows`) as `node_modules` to trigger arbitrary file destruction.
 3. **Resource Exhaustion (DoS) Limits:** All filesystem traversal algorithms implement a hard `--max-depth` boundary (default: 100) to prevent infinite loops from recursive symlinks.
 4. **Memory Exhaustion Prevention:** The `awake` parser will instantly reject any `.dehydrate.json` payload larger than 1MB to prevent Out-Of-Memory (OOM) attacks.

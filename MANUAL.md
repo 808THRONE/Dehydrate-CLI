@@ -24,6 +24,7 @@ Recursively traverses the current directory to find software projects. It evalua
 Executes the hibernation sequence. It utilizes the scanner to find stale projects in the current directory tree. For each stale project found, it enforces safety rules (checking for lockfiles), generates a `.dehydrate.json` snapshot, and permanently deletes heavy dependency directories to reclaim disk space.
 - **Usage:** `dehydrate hibernate [OPTIONS]`
 - **Options:**
+  - `-s, --stale-days <DAYS>`: Override the number of days a project must be untouched to be hibernated. (Default: 60)
   - `--dry-run`: Performs a simulated hibernation. It will print out which folders *would* be deleted and exactly how many megabytes *would* be saved, but will not actually delete anything. Highly recommended for first-time use.
   - `-m, --max-depth <DEPTH>`: The maximum directory depth to traverse during operations. (Default: 100)
 
