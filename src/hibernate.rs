@@ -107,6 +107,9 @@ fn remove_dir_all_force(path: &Path) -> Result<()> {
         {
             // Try to forcefully remove read-only flags
             WalkDir::new(path).into_iter().filter_map(|e| e.ok()).for_each(|entry| {
+                if entry.file_type().is_symlink() {
+                    return; // SECURITY: Never follow symlinks when stripping permissions!
+                }
                 if let Ok(mut perms) = entry.metadata().map(|m| m.permissions()) {
                     if perms.readonly() {
                         perms.set_readonly(false);

@@ -42,8 +42,11 @@ impl Scanner {
                         let project_dir_buf = project_dir.to_path_buf();
                         // Prevent scanning the same directory twice if it has multiple markers
                         if seen_dirs.insert(project_dir_buf.clone()) {
-                            if self.is_stale(project_dir)? {
-                                stale_projects.push(project_dir_buf);
+                            // SECURITY: Ignore projects that are already hibernated
+                            if !project_dir.join(".dehydrate.json").exists() {
+                                if self.is_stale(project_dir)? {
+                                    stale_projects.push(project_dir_buf);
+                                }
                             }
                         }
                     }

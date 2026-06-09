@@ -230,3 +230,36 @@ fn test_lockfile_deadlock_prevention() {
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(stdout.contains("Skipping auto-generation for the 1 missing lockfiles"), "Did not safely skip non-interactive auto-gen");
 }
+
+#[test]
+fn test_double_hibernation_data_loss_prevention() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let proj_dir = temp_dir.path().join("proj");
+    fs::create_dir(&proj_dir).unwrap();
+    
+    // Simulate an already hibernated project
+    touch(&proj_dir.join("package.json"));
+    touch(&proj_dir.join("package-lock.json"));
+    
+    let snapshot_path = proj_dir.join(".dehydrate.json");
+    let original_json = r#"{
+        "hibernated_at": "2000-01-01T00:00:00Z",
+        "ecosystems": ["Node"],
+        "package_managers": ["npm"],
+        "install_commands": ["npm ci"],
+        "deleted_paths": ["node_modules"],
+        "space_saved_bytes": 999999
+    }"#;
+    fs::write(&snapshot_path, original_json).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_Dehydrate"))
+        .arg("scan")
+        .arg("--stale-days")
+        .arg("0")
+        .current_dir(&temp_dir.path())
+        .output()
+        .unwrap();
+        
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("No stale projects found"), "Scanner failed to ignore already hibernated project!");
+}
