@@ -126,3 +126,107 @@ fn test_malicious_awake_rejection() {
         "Expected security abort message not found in stderr: {}", stderr
     );
 }
+
+#[test]
+fn test_oom_payload_rejection() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let proj_dir = temp_dir.path().join("proj");
+    fs::create_dir(&proj_dir).unwrap();
+    
+    // Create a 1.1MB padded file to trigger DoS limit
+    let snapshot_path = proj_dir.join(".dehydrate.json");
+    let mut file = fs::File::create(&snapshot_path).unwrap();
+    let padding = vec![b' '; 1024 * 1024 + 100]; // 1MB + 100 bytes
+    file.write_all(&padding).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_Dehydrate"))
+        .arg("awake")
+        .current_dir(&proj_dir)
+        .output()
+        .unwrap();
+    
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("over 1MB"), "Failed to reject bloated payload");
+}
+
+#[test]
+fn test_native_rce_injection_rejection() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let proj_dir = temp_dir.path().join("proj");
+    fs::create_dir(&proj_dir).unwrap();
+    
+    let snapshot_path = proj_dir.join(".dehydrate.json");
+    let malicious_json = r#"{
+        "hibernated_at": "2024-01-01T00:00:00Z",
+        "ecosystems": ["Custom"],
+        "package_managers": ["bash"],
+        "install_commands": ["bash -c 'rm -rf /'"],
+        "deleted_paths": ["node_modules"],
+        "space_saved_bytes": 1000
+    }"#;
+    fs::write(&snapshot_path, malicious_json).unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_Dehydrate"))
+        .arg("awake")
+        .current_dir(&proj_dir)
+        .output()
+        .unwrap();
+    
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("Unrecognized or malicious package manager"), "Failed to reject RCE payload");
+}
+
+#[test]
+fn test_infinite_recursion_dos_protection() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let root = temp_dir.path().join("root");
+    fs::create_dir(&root).unwrap();
+    
+    // Create deeply nested folders
+    let mut current = root.clone();
+    for _ in 0..20 {
+        current = current.join("nested");
+        fs::create_dir(&current).unwrap();
+    }
+    touch(&current.join("package.json"));
+    
+    // Run scanner with max depth 5, ensure it doesn't find the deeply nested project
+    let output = Command::new(env!("CARGO_BIN_EXE_Dehydrate"))
+        .arg("scan")
+        .arg("--stale-days")
+        .arg("0")
+        .arg("--max-depth")
+        .arg("5")
+        .current_dir(&root)
+        .output()
+        .unwrap();
+        
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(!stdout.contains("nested\\nested\\nested\\nested\\nested\\nested"), "Scanner bypassed depth limit");
+}
+
+#[test]
+fn test_lockfile_deadlock_prevention() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let proj_dir = temp_dir.path().join("proj");
+    fs::create_dir(&proj_dir).unwrap();
+    touch(&proj_dir.join("package.json"));
+    // DO NOT create package-lock.json
+
+    let child = Command::new(env!("CARGO_BIN_EXE_Dehydrate"))
+        .arg("hibernate")
+        .arg("--stale-days")
+        .arg("0")
+        .current_dir(&temp_dir.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("Failed to execute dehydrate");
+        
+    let output = child.wait_with_output().unwrap();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("Skipping auto-generation for the 1 missing lockfiles"), "Did not safely skip non-interactive auto-gen");
+}
