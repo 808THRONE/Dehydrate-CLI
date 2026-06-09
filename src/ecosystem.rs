@@ -80,7 +80,7 @@ fn analyze_node(project_dir: &Path) -> Result<SingleMetadata> {
     let mut targets = vec![];
     
     // Check for common heavy directories
-    let heavy_dirs = ["node_modules", "dist", ".next", "build"];
+    let heavy_dirs = ["node_modules", "dist", ".next", "build", ".yarn/cache"];
     for dir in heavy_dirs {
         let p = project_dir.join(dir);
         if p.exists() {
@@ -95,7 +95,7 @@ fn analyze_node(project_dir: &Path) -> Result<SingleMetadata> {
         ("yarn", "yarn install")
     } else if project_dir.join("package-lock.json").exists() {
         ("npm", "npm ci")
-    } else if project_dir.join("bun.lockb").exists() {
+    } else if project_dir.join("bun.lockb").exists() || project_dir.join("bun.lock").exists() {
         ("bun", "bun install")
     } else {
         return Err(anyhow::Error::new(MissingLockfileError {

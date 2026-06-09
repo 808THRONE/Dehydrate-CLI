@@ -31,7 +31,8 @@ pub fn rehydrate_project(project_dir: &Path) -> Result<()> {
                 .find(|p| *p == "venv" || *p == ".venv")
                 .map(|s| s.as_str())
                 .unwrap_or("venv");
-            println!("  - python -m venv {}", venv_name);
+            let python_bin = if cfg!(target_os = "windows") { "python" } else { "python3" };
+            println!("  - {} -m venv {}", python_bin, venv_name);
             let local_pip = if cfg!(target_os = "windows") { format!("{}\\Scripts\\pip", venv_name) } else { format!("{}/bin/pip", venv_name) };
             println!("  - {} install -r requirements.txt", local_pip);
             continue;
@@ -84,16 +85,31 @@ pub fn rehydrate_project(project_dir: &Path) -> Result<()> {
                     .unwrap_or("venv");
 
                 println!("Rebuilding Python virtual environment: {}...", venv_name);
-                let venv_status = Command::new("python")
+                
+                let python_bin = if cfg!(target_os = "windows") {
+                    "python"
+                } else {
+                    if std::process::Command::new("python3").arg("--version").output().is_ok() {
+                        "python3"
+                    } else {
+                        "python"
+                    }
+                };
+
+                let venv_status = Command::new(python_bin)
                     .arg("-m")
                     .arg("venv")
                     .arg(venv_name)
                     .current_dir(project_dir)
-                    .status()
-                    .with_context(|| "Failed to execute 'python -m venv'")?;
-                
-                if !venv_status.success() {
-                    bail!("Failed to recreate Python virtual environment.");
+                    .status();
+                    
+                match venv_status {
+                    Ok(status) if status.success() => {},
+                    Ok(_) => bail!("Failed to recreate Python virtual environment."),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                        bail!("Missing dependency: Please install Python (or ensure it is in your PATH) to rehydrate this project.");
+                    },
+                    Err(e) => bail!("Failed to execute '{} -m venv': {}", python_bin, e),
                 }
 
                 if cfg!(target_os = "windows") {
