@@ -43,13 +43,15 @@ pub fn rehydrate_project(project_dir: &Path) -> Result<()> {
     }
 
     use std::io::IsTerminal;
-    if std::io::stdin().is_terminal() {
-        println!("\nDo you trust this project environment? (Y/n)");
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input)?;
-        if input.trim().to_lowercase() != "y" && input.trim() != "" {
-            bail!("Rehydration safely aborted by user.");
-        }
+    if !std::io::stdin().is_terminal() {
+        bail!("Security Alert: Cannot run 'dehydrate awake' in non-interactive mode without explicit user consent.");
+    }
+
+    println!("\nDo you trust this project environment? (Y/n)");
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    if input.trim().to_lowercase() != "y" && input.trim() != "" {
+        bail!("Rehydration safely aborted by user.");
     }
 
     println!("Rehydrating {:?} project...", snapshot.ecosystems);

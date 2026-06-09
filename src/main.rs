@@ -29,6 +29,9 @@ enum Commands {
     },
     /// Hibernate stale projects to save disk space
     Hibernate {
+        /// Number of days a project must be untouched to be considered stale
+        #[arg(short, long, default_value_t = 60)]
+        stale_days: u32,
         /// Do a dry run without actually deleting any files
         #[arg(long)]
         dry_run: bool,
@@ -60,7 +63,7 @@ fn main() -> anyhow::Result<()> {
                 }
             }
         }
-        Commands::Hibernate { dry_run, max_depth } => {
+        Commands::Hibernate { stale_days, dry_run, max_depth } => {
             if *dry_run {
                 println!("Running hibernation in DRY RUN mode (no files will be deleted).");
             } else {
@@ -69,7 +72,7 @@ fn main() -> anyhow::Result<()> {
             
             let current_dir = env::current_dir()?;
             // We use the scanner to find projects to hibernate
-            let scanner = Scanner::new(60, *max_depth);
+            let scanner = Scanner::new(*stale_days, *max_depth);
             let stale_projects = scanner.scan(&current_dir)?;
             
             let mut ready_projects = Vec::new();
@@ -157,16 +160,12 @@ fn main() -> anyhow::Result<()> {
 
             println!("\nHibernating {} projects...", ready_projects.len());
             for (proj, metadata) in ready_projects {
-                if let Err(e) = crate::hibernate::execute_hibernation(&proj, metadata, *dry_run, *max_depth) {
-                    eprintln!("Error hibernating {}: {}", proj.display(), e);
-                }
+                crate::hibernate::execute_hibernation(&proj, metadata, *dry_run, *max_depth)?;
             }
         }
         Commands::Awake {} => {
             let current_dir = env::current_dir()?;
-            if let Err(e) = rehydrate_project(&current_dir) {
-                eprintln!("Error: {}", e);
-            }
+            rehydrate_project(&current_dir)?;
         }
     }
 
